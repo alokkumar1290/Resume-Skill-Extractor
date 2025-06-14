@@ -94,9 +94,6 @@ Configure the application by setting environment variables in the `.env` file:
 - `DATABASE_URL`: Database connection URL (default: SQLite)
 - `UPLOAD_FOLDER`: Directory to store uploaded files (default: ./uploads)
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
