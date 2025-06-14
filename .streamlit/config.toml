@@ -1,0 +1,3 @@
+[server]
+# Set maximum upload size to 10 MB (shows in widget label)
+maxUploadSize = 10

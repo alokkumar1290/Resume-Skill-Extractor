@@ -1,0 +1,14 @@
+streamlit==1.32.0
+sentence-transformers==2.2.2
+scikit-learn==1.4.2
+flask==3.0.2
+langchain==0.1.12
+huggingface-hub==0.20.3
+pyPDF2==3.0.1
+pdfplumber==0.10.3
+sqlalchemy==2.0.25
+python-dotenv==1.0.1
+pandas==2.1.4
+langchain-community>=0.0.28,<0.1.0
+python-multipart==0.0.6
+streamlit-extras==0.3.0
