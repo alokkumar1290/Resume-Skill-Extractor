@@ -8,7 +8,7 @@ python-multipart==0.0.6
 sqlalchemy==2.0.25
 
 # Data Processing
-pandas==2.1.4
+pandas==2.2.0  # Updated for Python 3.13 compatibility
 scikit-learn==1.4.2
 
 # PDF Processing
