@@ -3,10 +3,11 @@ import json
 from typing import List
 from sentence_transformers import SentenceTransformer
 import numpy as np
+from typing import Optional
 
 # Load a lightweight embedding model once
 MODEL_NAME = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-_embedder: SentenceTransformer | None = None
+_embedder: Optional[SentenceTransformer] = None
 
 def _get_model() -> SentenceTransformer:
     global _embedder
