@@ -8,7 +8,7 @@ python-multipart==0.0.6
 sqlalchemy==2.0.25
 
 # Data Processing
-pandas==2.2.0  # Updated for Python 3.13 compatibility
+pandas==2.1.4
 scikit-learn==1.4.2
 
 # PDF Processing
@@ -18,6 +18,12 @@ pyPDF2==3.0.1
 # AI/ML
 sentence-transformers==2.2.2
 huggingface-hub==0.20.3
+
+# Additional Dependencies from working set
+numpy>=1.24.0
+torch>=2.0.0
+transformers>=4.30.0
+tokenizers>=0.13.0
 
 # LangChain
 langchain==0.1.12
