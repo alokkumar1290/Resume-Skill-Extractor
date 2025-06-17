@@ -1,8 +1,14 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime, func, CheckConstraint
+from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime, func, CheckConstraint, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
+import sys
+import logging
 from typing import Optional
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create base class for models
 Base = declarative_base()
@@ -42,16 +48,43 @@ class Resume(Base):
 
 # Database connection and session management
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./resumes.db')
-engine = create_engine(
-    DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith('sqlite') else {}
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+try:
+    # For SQLite, ensure the directory exists
+    if DATABASE_URL.startswith('sqlite'):
+        db_path = DATABASE_URL.split('sqlite:///')[-1]
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        logger.info(f"Using SQLite database at: {os.path.abspath(db_path)}")
+
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False} if DATABASE_URL.startswith('sqlite') else {},
+        echo=True  # This will log all SQL queries
+    )
+    
+    # Enable foreign key constraints for SQLite
+    if DATABASE_URL.startswith('sqlite'):
+        @event.listens_for(engine, 'connect')
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+    
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    
+except Exception as e:
+    logger.error(f"Failed to initialize database: {str(e)}")
+    raise
 
 def init_db() -> None:
-    """
-    Initialize the database by creating all tables.
-    """
-    Base.metadata.create_all(bind=engine)
+    """Initialize the database."""
+    try:
+        logger.info("Initializing database...")
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing database: {str(e)}")
+        raise
 
 def get_db():
     """

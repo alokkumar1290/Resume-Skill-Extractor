@@ -1,10 +1,16 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 import json
+import logging
 from typing import List, Dict, Any, Optional, Tuple
 import pickle, numpy as np
 from pathlib import Path
-from .models import Resume, SessionLocal
+from .models import Resume, SessionLocal, logger
+
+# Set up logging if not already configured
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def set_hired(resume_id: int, hired: bool = True):
     db = SessionLocal()
@@ -27,7 +33,13 @@ def save_resume(resume_data: Dict[str, Any]) -> Resume:
         
     Returns:
         Resume: The saved Resume object
+        
+    Raises:
+        Exception: If there's an error saving to the database
     """
+    logger.info("Starting to save resume data...")
+    logger.debug(f"Resume data: {json.dumps(resume_data, indent=2, default=str)}")
+    
     db = SessionLocal()
     try:
         # Convert lists/dicts to JSON strings
@@ -36,50 +48,89 @@ def save_resume(resume_data: Dict[str, Any]) -> Resume:
         education = resume_data.get('education', [])
         raw_text = resume_data.get('raw_text', '')
         
+        logger.debug("Converting data to JSON format...")
+        
         # Ensure skills is a dictionary with technical and soft keys
         if not isinstance(skills, dict):
+            logger.warning("Skills is not a dictionary, initializing with empty lists")
             skills = {'technical': [], 'soft': []}
         if 'technical' not in skills:
             skills['technical'] = []
         if 'soft' not in skills:
             skills['soft'] = []
             
-        skills_json = json.dumps(skills)
-        experience_json = json.dumps(experience)
-        education_json = json.dumps(education)
+        try:
+            skills_json = json.dumps(skills)
+            experience_json = json.dumps(experience)
+            education_json = json.dumps(education)
+            logger.debug("Successfully converted data to JSON format")
+        except Exception as e:
+            logger.error(f"Error converting data to JSON: {str(e)}")
+            raise ValueError(f"Invalid data format: {str(e)}")
         
         # Generate embedding for the raw text
-        from app.processing.embeddings import embed_text
-        try:
-            embedding_vector = embed_text(raw_text)
-            embedding_json = json.dumps(embedding_vector) if embedding_vector else None
-        except Exception as e:
-            print(f"Error generating embedding: {e}")
-            embedding_json = None
+        embedding_json = None
+        if raw_text:
+            try:
+                from app.processing.embeddings import embed_text
+                logger.debug("Generating embeddings for raw text...")
+                embedding_vector = embed_text(raw_text)
+                if embedding_vector:
+                    embedding_json = json.dumps(embedding_vector)
+                    logger.debug("Successfully generated embeddings")
+                else:
+                    logger.warning("No embedding vector returned from embed_text")
+            except Exception as e:
+                logger.error(f"Error generating embedding: {str(e)}", exc_info=True)
+                # Don't fail the whole operation if embedding fails
+                embedding_json = None
         
         # Create new Resume object
-        db_resume = Resume(
-            name=resume_data.get('name', ''),
-            email=resume_data.get('email', ''),
-            phone=resume_data.get('phone', ''),
-            skills=skills_json,
-            experience=experience_json,
-            education=education_json,
-            cgpa=float(resume_data.get('cgpa')) if resume_data.get('cgpa') is not None else None,
-            raw_text=raw_text,
-            embedding=embedding_json
-        )
-        
-        db.add(db_resume)
-        db.commit()
-        db.refresh(db_resume)
-        return db_resume
+        try:
+            logger.debug("Creating Resume object...")
+            cgpa = resume_data.get('cgpa')
+            if cgpa is not None:
+                try:
+                    cgpa = float(cgpa)
+                    if cgpa < 0 or cgpa > 10:  # Assuming 10-point scale
+                        logger.warning(f"CGPA {cgpa} is outside the expected range (0-10)")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid CGPA value: {cgpa}, setting to None")
+                    cgpa = None
+            
+            db_resume = Resume(
+                name=resume_data.get('name', ''),
+                email=resume_data.get('email', ''),
+                phone=resume_data.get('phone', ''),
+                skills=skills_json,
+                experience=experience_json,
+                education=education_json,
+                cgpa=cgpa,
+                raw_text=raw_text,
+                embedding=embedding_json
+            )
+            
+            logger.debug("Adding resume to database session...")
+            db.add(db_resume)
+            logger.debug("Committing transaction...")
+            db.commit()
+            db.refresh(db_resume)
+            logger.info(f"Successfully saved resume with ID: {db_resume.id}")
+            return db_resume
+            
+        except Exception as e:
+            logger.error(f"Error creating/saving resume: {str(e)}", exc_info=True)
+            db.rollback()
+            raise
     except Exception as e:
-        db.rollback()
-        print(f"Error saving resume: {e}")
-        raise e
+        logger.error(f"Unexpected error in save_resume: {str(e)}", exc_info=True)
+        if 'db' in locals() and db:
+            db.rollback()
+        raise
     finally:
-        db.close()
+        if 'db' in locals() and db:
+            db.close()
+            logger.debug("Database session closed")
 
 def get_all_resumes(limit: int = 100, skip: int = 0) -> List[Resume]:
     """

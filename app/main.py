@@ -30,41 +30,110 @@ st.set_page_config(
 from app.database.crud import set_hired
 
 def display_resume(resume: Resume) -> None:
-    """Display a single resume in an expandable section."""
-    with st.expander(f"📄 {resume.name}", expanded=False):
-        col1, col2 = st.columns(2)
+    """Display detailed view of a single resume."""
+    st.markdown(f"## {resume.name or 'Unnamed Resume'}")
+    
+    # Basic info in columns
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("### 📝 Personal Information")
+        st.markdown(f"**Email:** {resume.email or 'N/A'}")
+        st.markdown(f"**Phone:** {resume.phone or 'N/A'}")
+        if hasattr(resume, 'created_at') and resume.created_at:
+            st.markdown(f"**Added on:** {resume.created_at.strftime('%Y-%m-%d %H:%M')}")
+    
+    with col2:
+        st.markdown("### 🎓 Education")
+        if resume.education:
+            try:
+                education_data = json.loads(resume.education) if isinstance(resume.education, str) else resume.education
+                if isinstance(education_data, list) and education_data:
+                    for edu in education_data[:1]:  # Show only the highest education
+                        if not isinstance(edu, dict):
+                            continue
+                        st.markdown(f"**Degree:** {edu.get('degree', 'N/A')}")
+                        st.markdown(f"**Institution:** {edu.get('institution', 'N/A')}")
+                        if 'cgpa' in edu and edu['cgpa']:
+                            try:
+                                cgpa = float(edu['cgpa'])
+                                st.markdown(f"**CGPA:** {cgpa:.2f}")
+                            except (ValueError, TypeError):
+                                st.markdown(f"**CGPA:** {edu['cgpa']}")
+                else:
+                    st.markdown("No education data")
+            except (json.JSONDecodeError, TypeError):
+                st.markdown("Error parsing education data")
+    
+    with col3:
+        st.markdown("### ⚙️ Quick Stats")
+        # Count technical skills
+        tech_skill_count = 0
+        if resume.skills:
+            try:
+                skills_data = json.loads(resume.skills) if isinstance(resume.skills, str) else resume.skills
+                if isinstance(skills_data, dict) and 'technical' in skills_data:
+                    tech_skill_count = len(skills_data['technical'])
+            except (json.JSONDecodeError, AttributeError):
+                pass
         
-        with col1:
-            st.subheader("Personal Information")
-            st.write(f"**Name:** {resume.name}")
-            st.write(f"**Email:** {resume.email}")
-            st.markdown(f"**Phone:** {resume.phone}")
-
-            
-            if resume.education:
-                st.subheader("Education")
-                for edu in json.loads(resume.education):
-                    st.write(f"**Degree:** {edu.get('degree', 'N/A')}")
-                    st.write(f"**Institution:** {edu.get('institution', 'N/A')}")
-                    st.write(f"**CGPA:** {edu.get('cgpa', 'N/A')}")
-                    st.write("---")
+        # Count projects/experience
+        project_count = 0
+        if resume.experience:
+            try:
+                exp_data = json.loads(resume.experience) if isinstance(resume.experience, str) else resume.experience
+                project_count = len(exp_data) if isinstance(exp_data, list) else 0
+            except (json.JSONDecodeError, AttributeError):
+                pass
         
-        with col2:
-            if resume.skills:
-                st.subheader("Skills")
-                skills = json.loads(resume.skills)
-                if skills.get('technical'):
-                    st.write("**Technical:** " + ", ".join(skills['technical']))
-                if skills.get('soft'):
-                    st.write("**Soft Skills:** " + ", ".join(skills['soft']))
-            
-            if resume.experience:
-                st.subheader("Work Experience")
-                for exp in json.loads(resume.experience):
-                    st.write(f"**{exp.get('role', 'N/A')}**")
-                    st.write(f"{exp.get('company', 'N/A')} - {exp.get('duration', 'N/A')}")
-                    st.write(exp.get('description', ''))
-                    st.write("---")
+        st.metric("Technical Skills", tech_skill_count)
+        st.metric("Projects/Experience", project_count)
+        st.metric("Status", "Hired ✅" if getattr(resume, 'hired', 0) == 1 else "Not Hired ❌")
+    
+    # Skills section
+    st.markdown("---")
+    st.markdown("### 🛠️ Technical Skills")
+    if resume.skills:
+        try:
+            skills_data = json.loads(resume.skills) if isinstance(resume.skills, str) else resume.skills
+            if isinstance(skills_data, dict) and 'technical' in skills_data and skills_data['technical']:
+                # Display skills as chips/tags
+                st.write(" ".join([f"`{skill}`" for skill in skills_data['technical'][:10]]))
+                if len(skills_data['technical']) > 10:
+                    st.write(f"*+ {len(skills_data['technical']) - 10} more skills*")
+            else:
+                st.info("No technical skills listed")
+        except (json.JSONDecodeError, AttributeError):
+            st.warning("Could not parse skills data")
+    else:
+        st.info("No skills information available")
+    
+    # Experience section
+    st.markdown("---")
+    st.markdown("### 💼 Experience")
+    if resume.experience:
+        try:
+            exp_data = json.loads(resume.experience) if isinstance(resume.experience, str) else resume.experience
+            if isinstance(exp_data, list) and exp_data:
+                for exp in exp_data[:5]:  # Limit to 5 most recent
+                    if not isinstance(exp, dict):
+                        continue
+                    with st.expander(f"{exp.get('role', 'Unknown Role')} at {exp.get('company', 'Unknown Company')}", expanded=False):
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            if 'description' in exp:
+                                st.markdown(exp['description'])
+                        with col2:
+                            if 'duration' in exp:
+                                st.caption(f"⏱️ {exp['duration']}")
+                            if 'location' in exp:
+                                st.caption(f"📍 {exp['location']}")
+            else:
+                st.info("No experience data available")
+        except (json.JSONDecodeError, AttributeError):
+            st.warning("Could not parse experience data")
+    else:
+        st.info("No experience information available")
 
 # ---------- Helper to show a clean summary ----------
 def display_summary(resume_dict: Dict[str, Any]) -> None:
@@ -128,78 +197,174 @@ def main():
             if uploaded_file.size > 10 * 1024 * 1024:
                 st.error("File too large. Maximum size is 10 MB.")
                 return
+                
             with st.spinner("Processing resume..."):
+                temp_path = None
                 try:
+                    # Log file upload
+                    st.session_state.uploaded_file_name = uploaded_file.name
+                    st.session_state.uploaded_file_size = f"{uploaded_file.size / 1024:.1f} KB"
+                    
                     # Save uploaded file temporarily
-                    temp_path = Path("temp_resume.pdf")
+                    temp_dir = Path("temp")
+                    temp_dir.mkdir(exist_ok=True)
+                    temp_path = temp_dir / f"{os.urandom(8).hex()}_{uploaded_file.name}"
+                    
                     with open(temp_path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
                     
+                    st.info(f"Processing file: {uploaded_file.name} ({st.session_state.uploaded_file_size})")
+                    
                     # Extract data
-                    resume_data = extract_resume_data(temp_path)
+                    with st.spinner("Extracting data from resume..."):
+                        resume_data = extract_resume_data(temp_path)
+                    
+                    if not resume_data:
+                        raise ValueError("No data could be extracted from the resume")
                     
                     # Show clean summary upfront
-                    display_summary(resume_data)
+                    with st.expander("📝 Extracted Information", expanded=True):
+                        display_summary(resume_data)
                     
                     # Save to database
-                    resume = save_resume(resume_data)
+                    with st.spinner("Saving to database..."):
+                        resume = save_resume(resume_data)
                     
-                    # Clean up
-                    temp_path.unlink()
-                    
-                    st.success("Resume processed successfully!")
+                    st.success("✅ Resume processed and saved successfully!")
                     st.balloons()
                     
-                    # Display the extracted data
+                    # Store the saved resume ID in session state
+                    st.session_state.last_saved_resume_id = resume.id
+                    
+                    # Display the resume details directly
+                    st.markdown("---")
                     display_resume(resume)
                     
                 except Exception as e:
-                    st.error(f"Error processing resume: {str(e)}")
+                    st.error(f"❌ Error processing resume: {str(e)}")
+                    st.error("Please check the console for more details.")
+                    import traceback
+                    st.code(traceback.format_exc(), language='python')
+                    
+                finally:
+                    # Clean up temporary file
+                    if temp_path and temp_path.exists():
+                        try:
+                            temp_path.unlink()
+                        except Exception as e:
+                            st.warning(f"Warning: Could not delete temporary file: {e}")
     
     elif page == "View Resumes":
-        st.header("All Resumes")
+        st.header("Resume Database")
+        
+        # Add a toggle for detailed view
+        show_detailed_view = st.toggle("Show Detailed View", value=False)
+        
         resumes = get_all_resumes()
         
         if not resumes:
             st.info("No resumes found in the database.")
         else:
-            # ---------- Compact table summary ----------
-            summary_rows = []
-            for r in resumes:
-                try:
-                    skills = json.loads(r.skills) if r.skills else {}
-                except json.JSONDecodeError:
-                    skills = {}
-                summary_rows.append({
-                    "ID": r.id,
-                    "Name": r.name,
-                    "Email": r.email,
-                    "Phone": r.phone,
-                    "CGPA": r.cgpa if r.cgpa is not None else "",
-                    "Tech Skills": ", ".join(skills.get("technical", [])) if skills.get("technical") else "",
-                    "No. of Projects": (lambda exp: (len(exp) if exp else None))(json.loads(r.experience) if r.experience else []),
-                    "Hired": bool(r.hired),
-                    "Created": r.created_at.strftime("%Y-%m-%d") if r.created_at else ""
-                })
-            import copy
-            df_original = pd.DataFrame(summary_rows)
-            edited_df = st.data_editor(
-                df_original,
-                column_config={"Hired": st.column_config.CheckboxColumn()},
-                hide_index=True,
-                key="resume_editor"
-            )
-            # Update DB if any hired flag changed
-            if not edited_df["Hired"].equals(df_original["Hired"]):
-                for _, row in edited_df.iterrows():
-                    orig_val = df_original.loc[df_original["ID"]==row["ID"], "Hired"].values[0]
-                    if row["Hired"] != orig_val:
-                        set_hired(int(row["ID"]), bool(row["Hired"]))
-                st.success("Updated hired flags.")
-                st.experimental_rerun()
-            
+            # Prepare data for the table
+            table_data = []
             for resume in resumes:
-                display_resume(resume)
+                try:
+                    # Parse skills and count technical skills
+                    tech_skills = []
+                    if resume.skills:
+                        try:
+                            skills_data = json.loads(resume.skills) if isinstance(resume.skills, str) else resume.skills
+                            tech_skills = skills_data.get('technical', []) if isinstance(skills_data, dict) else []
+                        except (json.JSONDecodeError, AttributeError):
+                            tech_skills = []
+                    
+                    # Count projects from experience
+                    num_projects = 0
+                    if resume.experience:
+                        try:
+                            exp_data = json.loads(resume.experience) if isinstance(resume.experience, str) else resume.experience
+                            num_projects = len(exp_data) if isinstance(exp_data, list) else 0
+                        except (json.JSONDecodeError, AttributeError):
+                            num_projects = 0
+                    
+                    # Format created date
+                    created_date = resume.created_at.strftime('%Y-%m-%d %H:%M') if hasattr(resume, 'created_at') and resume.created_at else 'N/A'
+                    
+                    # Add to table data
+                    table_data.append({
+                        'Name': resume.name or 'N/A',
+                        'Email': resume.email or 'N/A',
+                        'Phone': resume.phone or 'N/A',
+                        'CGPA': f"{resume.cgpa:.2f}" if resume.cgpa is not None else 'N/A',
+                        'Tech Skills': ', '.join(tech_skills[:3]) + ('...' if len(tech_skills) > 3 else ''),
+                        'Projects': num_projects,
+                        'Hired': bool(getattr(resume, 'hired', 0)),  # Store as boolean for checkbox
+                        'Hired_Display': '✅' if getattr(resume, 'hired', 0) == 1 else '❌',  # For display only
+                        'Created': created_date,
+                        '_resume': resume  # Store the full resume object for detailed view
+                    })
+                except Exception as e:
+                    import logging
+                    logging.error(f"Error processing resume {getattr(resume, 'id', 'unknown')}: {str(e)}")
+            
+            # Display the table
+            if table_data:
+                # Convert to DataFrame for better display
+                import pandas as pd
+                df = pd.DataFrame(table_data)
+                
+                # Display the table with editable Hired column
+                display_cols = [col for col in df.columns if not col.startswith('_') and col != 'Hired_Display']
+                
+                # Create a copy of the dataframe for editing
+                edited_df = st.data_editor(
+                    df[display_cols],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        'Tech Skills': st.column_config.TextColumn(
+                            'Tech Skills',
+                            help='Top 3 technical skills',
+                            max_chars=50
+                        ),
+                        'CGPA': st.column_config.NumberColumn(
+                            'CGPA',
+                            format='%.2f',
+                            help='Cumulative Grade Point Average'
+                        ),
+                        'Hired': st.column_config.CheckboxColumn(
+                            'Hired',
+                            help='Mark as hired',
+                            default=False
+                        )
+                    },
+                    disabled=([col for col in display_cols if col != 'Hired']),  # Only allow editing the Hired column
+                    key='resume_editor'
+                )
+                
+                # Update database if any hiring status changed
+                if not df[display_cols].equals(edited_df):
+                    for idx, row in edited_df.iterrows():
+                        if idx in df.index and df.at[idx, 'Hired'] != row['Hired']:
+                            resume_id = df.at[idx, '_resume'].id
+                            set_hired(resume_id, row['Hired'])
+                    st.success("Hiring status updated successfully!")
+                    st.rerun()
+                
+                # Show detailed view if toggled
+                if show_detailed_view and not df.empty:
+                    st.subheader("Detailed View")
+                    selected_index = st.selectbox(
+                        "Select a resume to view details:",
+                        range(len(df)),
+                        format_func=lambda i: f"{df.iloc[i]['Name']} - {df.iloc[i]['Email']}"
+                    )
+                    
+                    if 0 <= selected_index < len(df):
+                        selected_resume = df.iloc[selected_index]['_resume']
+                        display_resume(selected_resume)
+                        st.markdown("---")
+                        st.header("Upload New Resume")
     
     elif page == "Filter":
         st.header("Filter Resumes")
